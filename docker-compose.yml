@@ -1,0 +1,106 @@
+services:
+  api-a:
+    build: ./api-a
+    container_name: node-api-a
+    ports:
+      - "3001:3001"
+      - '9464:9464'
+    volumes:
+      - .:/usr/src/app
+      - ./logs:/path/to/your/logs
+    environment:
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+    depends_on:
+      - jaeger
+      - loki
+    networks:
+      - observability
+  api-b:
+    build: ./api-b
+    container_name: node-api-b
+    ports:
+      - "3002:3002"
+      - '9465:9464'
+
+    volumes:
+      - .:/usr/src/app
+      - ./logs:/path/to/your/logs
+    environment:
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+    depends_on:
+      - jaeger
+      - loki
+    networks:
+      - observability
+  loki:
+    image: grafana/loki:2.9.8
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/config:/etc/loki/loki-local-config.yaml
+    #command: -config.file=/etc/loki/config/loki-local-config.yaml
+    networks:
+      - observability
+  grafana:
+    image: grafana/grafana:9.5.2
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+    networks:
+      - observability
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: node-api-promtail
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/promtail-config.yml
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers
+    # command: -config.file=/etc/promtail/config/promtail-config.yml
+    networks:
+      - observability
+  otel-collector:
+   image: otel/opentelemetry-collector:latest
+   ports:
+     - "4317:4317"
+     - "4318:4318"
+     #command:
+     #--config=/etc/otel-collector-config.yml
+   volumes:
+    - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+   environment:
+    - OTEL_LOGS_EXPORTER=otlp
+    - OTEL_TRACES_EXPORTER=otlp
+    - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+   networks:
+      - observability
+  jaeger:
+    image: jaegertracing/all-in-one:1.33
+    ports:
+      - "5775:5775"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+    networks:
+      - observability 
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - '9090:9090' 
+    networks:
+      - observability 
+   
+networks:
+  observability:
+    driver: bridge
+
+
